@@ -129,7 +129,7 @@ async def cancel_clear_words(callback_query: CallbackQuery):
 async def process_show_forbidden_words(callback_query: CallbackQuery):
     user_id = callback_query.from_user.id
     if not await is_user_admin(user_id):
-        await callback_query.answer("У вас нет прав доступа.", show_alert=True)
+
         return
 
     forbidden_words = await get_forbidden_words()
@@ -306,6 +306,8 @@ async def handle_group_message(message: Message):
 
     if text:
         forbidden_words = await get_forbidden_words()
+        if len(text) > 300:
+            await message.delete()
         threshold = 75
         lower_text = text.lower()
         for word in forbidden_words:
