@@ -10,7 +10,7 @@ venv/
 config/.env
 
 # База данных
-forbidden_words.db
+# forbidden_words.db
 
 # Логи и временные файлы
 *.log

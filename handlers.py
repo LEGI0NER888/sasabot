@@ -258,7 +258,7 @@ async def handle_group_message(message: Message):
     if chat_id not in message_counts:
         message_counts[chat_id] = {}
 
-    logger.info(f"Получено сообщение: chat_id={chat_id}, message_id={message_id}, thread_id={thread_id}")
+    # logger.info(f"Получено сообщение: chat_id={chat_id}, message_id={message_id}, thread_id={thread_id}")
 
     delete_message_count = int(await get_setting("delete_message_count") or 5)
     first_post_message = await get_setting("first_post_message") or (
@@ -266,7 +266,7 @@ async def handle_group_message(message: Message):
     )
 
     if message.from_user and message.from_user.id == bot.id:
-        logger.info("Сообщение от бота. Пропускаем.")
+        # logger.info("Сообщение от бота. Пропускаем.")
         return
 
     if message.entities:
@@ -274,7 +274,7 @@ async def handle_group_message(message: Message):
             if entity.type == 'bot_command':
                 try:
                     await message.delete()
-                    logger.info(f"Удалена команда от пользователя {message.from_user.id} в чате {chat_id}")
+                    # logger.info(f"Удалена команда от пользователя {message.from_user.id} в чате {chat_id}")
                 except Exception as e:
                     logger.error(f"Ошибка при удалении команды: {e}")
                 return
@@ -282,7 +282,7 @@ async def handle_group_message(message: Message):
     if message.sender_chat and message.sender_chat.id == CHANNEL_ID and not thread_id:
         try:
             await message.reply(first_post_message)
-            logger.info(f"Отправлено первое сообщение в ответ на пост ID: {message_id} в чате ID: {chat_id}")
+            # logger.info(f"Отправлено первое сообщение в ответ на пост ID: {message_id} в чате ID: {chat_id}")
             message_counts[chat_id][message_id] = 0
         except Exception as e:
             logger.error(f"Ошибка при отправке первого сообщения: {e}")
@@ -294,13 +294,13 @@ async def handle_group_message(message: Message):
         if delete_count < delete_message_count:
             try:
                 await message.delete()
-                logger.info(f"Удалено сообщение ID: {message_id} в треде ID: {thread_id}")
+                # logger.info(f"Удалено сообщение ID: {message_id} в треде ID: {thread_id}")
                 delete_count += 1
                 message_counts[chat_id][thread_id] = delete_count
 
                 if delete_count >= delete_message_count:
                     del message_counts[chat_id][thread_id]
-                    logger.info(f"Достигнуто максимальное количество удалений для треда ID: {thread_id}")
+                    # logger.info(f"Достигнуто максимальное количество удалений для треда ID: {thread_id}")
             except Exception as e:
                 logger.error(f"Ошибка при удалении сообщения: {e}")
 
@@ -314,7 +314,7 @@ async def handle_group_message(message: Message):
             if re.search(pattern, lower_text) or similarity >= threshold:
                 try:
                     await message.delete()
-                    logger.info(f"Удалено сообщение {message.message_id} с запрещённым словом '{word}'")
+                    # logger.info(f"Удалено сообщение {message.message_id} с запрещённым словом '{word}'")
                 except Exception as e:
                     logger.error(f"Ошибка при удалении сообщения {message.message_id}: {e}")
                 break
@@ -425,7 +425,7 @@ async def unban_all_confirm(callback_query: CallbackQuery):
             )
             await reset_user_mute_count(user_id)
             success_count += 1
-            logger.info(f"Пользователь {user_id} разбанен администратором {admin_user_id}.")
+            # logger.info(f"Пользователь {user_id} разбанен администратором {admin_user_id}.")
         except Exception as e:
             logger.error(f"Ошибка при разбане пользователя {user_id}: {e}")
 
@@ -476,7 +476,7 @@ async def unban_user(callback_query: CallbackQuery):
             await reset_user_mute_count(selected_user_id)
             await callback_query.answer(f"Пользователь {selected_user_id} разбанен.", show_alert=True)
             await callback_query.message.delete()
-            logger.info(f"Пользователь {selected_user_id} разбанен администратором {admin_user_id}.")
+            # logger.info(f"Пользователь {selected_user_id} разбанен администратором {admin_user_id}.")
         except Exception as e:
             logger.error(f"Ошибка при разбане пользователя {selected_user_id}: {e}")
             await callback_query.answer(f"Не удалось разбанить пользователя {selected_user_id}.", show_alert=True)
@@ -585,7 +585,7 @@ async def unban_users_confirm(callback_query: CallbackQuery):
                 permissions=ChatPermissions(can_send_messages=True)
             )
             await add_or_update_user(user['user_id'], user['chat_id'], 0, None)
-            logger.info(f"Пользователь {user['user_id']} разблокирован и счетчик мутов сброшен.")
+            # logger.info(f"Пользователь {user['user_id']} разблокирован и счетчик мутов сброшен.")
         except Exception as e:
             logger.error(f"Ошибка при разблокировке пользователя {user['user_id']}: {e}")
 

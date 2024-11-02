@@ -66,7 +66,7 @@ async def load_forbidden_words():
         async with db_connection.execute('SELECT word FROM forbidden_words') as cursor:
             async for row in cursor:
                 forbidden_words_cache.add(row[0])
-    logger.info(f"Загружены запрещённые слова: {forbidden_words_cache}")
+    # logger.info(f"Загружены запрещённые слова: {forbidden_words_cache}")
 
 async def get_forbidden_words():
     async with cache_lock:
@@ -105,7 +105,7 @@ async def load_settings():
         async with db_connection.execute('SELECT key, value FROM settings') as cursor:
             async for row in cursor:
                 settings_cache[row[0]] = row[1]
-    logger.info(f"Загружены настройки: {settings_cache}")
+    # logger.info(f"Загружены настройки: {settings_cache}")
 
 async def get_setting(key):
     async with cache_lock:
@@ -146,7 +146,7 @@ async def add_or_update_user(user_id, chat_id, mute_count, last_mute_time):
             last_mute_time=excluded.last_mute_time
     ''', (user_id, chat_id, mute_count, last_mute_time.isoformat() if last_mute_time else None))
     await db_connection.commit()
-    logger.info(f"Обновлена информация о пользователе {user_id}")
+    # logger.info(f"Обновлена информация о пользователе {user_id}")
 
 async def reset_mute_counts():
     await db_connection.execute('''
@@ -158,7 +158,7 @@ async def reset_mute_counts():
 async def reset_user_mute_count(user_id):
     await db_connection.execute('UPDATE users SET mute_count = 0, last_mute_time = NULL WHERE user_id = ?', (user_id,))
     await db_connection.commit()
-    logger.info(f"Сброшен счетчик мутов пользователя {user_id}")
+    # logger.info(f"Сброшен счетчик мутов пользователя {user_id}")
 
 async def get_user_data(user_id):
     return await get_user(user_id)
