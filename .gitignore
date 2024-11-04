@@ -11,7 +11,7 @@ config/.env
 
 # База данных
 forbidden_words.db
-
+locustfile.py
 # Логи и временные файлы
 *.log
 *.sqlite3
