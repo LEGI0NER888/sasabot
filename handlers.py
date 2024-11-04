@@ -1,6 +1,6 @@
 # handlers.py
-
-
+from datetime import datetime, timedelta
+from aiogram.enums import ParseMode
 import re
 import logging
 from aiogram import F, Router
@@ -39,11 +39,9 @@ message_counts = defaultdict(dict)
 # Флаг для отслеживания, было ли отправлено приветственное сообщение в теме
 welcome_sent = {}  # Ключ: thread_id, Значение: True/False
 
-# Словарь для отслеживания количества сообщений со ссылками от каждого пользователя
-link_spam_counts = {}  # Ключ: user_id, Значение: количество сообщений со ссылками
+# Флаг для отслеживания времени последнего использования команды
+last_command_times = {}
 
-# Словарь для подсчёта количества мутов пользователя
-mute_counts = {}  # Ключ: user_id, Значение: количество мутов
 
 # Проверка, является ли пользователь администратором
 async def is_user_admin(user_id):
@@ -256,12 +254,18 @@ def transliterate_to_cyrillic(text):
         'm': 'м', 'n': 'н', 'o': 'о', 'p': 'п', 'r': 'р',
         's': 'с', 't': 'т', 'u': 'у', 'f': 'ф', 'h': 'х',
         'c': 'ц', 'y': 'у', 'w': 'ш', 'x': 'кс', 'q': 'к',
-        # Добавьте дополнительные соответствия по необходимости
+
     }
     result = ''
     for char in text:
         result += translit_map.get(char, char)
     return result
+
+last_command_time = None
+rules = """, вот <b>правила чата:</b>
+\n1. Нельзя писать команды <i>(через /)</i>
+\n2. Без запреток
+\n3. Спам наказывается <i>временным</i> мутом - особенных нарушителей может <b><i>замутить навсегда!</i></b>"""
 
 # Обработчик сообщений в группе
 @router.message(F.chat.id == GROUP_ID)
@@ -294,6 +298,20 @@ async def handle_group_message(message: Message):
                 except Exception as e:
                     logger.error(f"Ошибка при удалении команды: {e}")
                 return
+        
+    # Логика обработки команды !правила
+    if text and text.lower() == '!правила':
+        current_time = datetime.now()
+        
+        # Получаем время последнего использования команды для этого чата
+        last_command_time = last_command_times.get(chat_id)
+
+        if last_command_time and (current_time - last_command_time) < timedelta(seconds=90):
+            return  # Игнорируем команду
+        else:
+            # Обновляем время последнего использования для текущего чата
+            last_command_times[chat_id] = current_time
+            await message.reply(f'Привет {message.from_user.full_name}{rules}',parse_mode=ParseMode.HTML)    
 
     if message.sender_chat and message.sender_chat.id == CHANNEL_ID and not thread_id:
         try:
@@ -319,6 +337,8 @@ async def handle_group_message(message: Message):
                     # logger.info(f"Достигнуто максимальное количество удалений для треда ID: {thread_id}")
             except Exception as e:
                 logger.error(f"Ошибка при удалении сообщения: {e}")
+
+
 
     # Проверка на запрещённые слова
     if text:
@@ -348,6 +368,9 @@ async def handle_group_message(message: Message):
                 except Exception as e:
                     logger.error(f"Ошибка при удалении сообщения {message.message_id}: {e}")
                 break  # Останавливаем проверку, если сообщение уже удалено
+    
+     
+
 
 # Обработчик для показа перманентно забаненных пользователей с пагинацией
 @router.callback_query(lambda c: c.data.startswith('show_permanently_banned_users'))
@@ -517,7 +540,10 @@ async def unban_user(callback_query: CallbackQuery):
 # Обработчик изменения сообщения для первого поста
 @router.callback_query(lambda c: c.data == 'change_first_post_message')
 async def prompt_for_new_post_message(callback_query: CallbackQuery, state: FSMContext):
-    await callback_query.message.answer("Введите новое описание для первого поста:")
+    first_message = await get_setting("first_post_message")
+    await callback_query.message.answer(f"<b>Текст поста сейчас: \n<i>{first_message}</i></b>\n\n\nВведите новое описание для первого поста:", parse_mode=ParseMode.HTML,reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[[InlineKeyboardButton(text="❌ Отмена", callback_data="close_message_and_state")]]
+            ))
     await state.set_state(FunctionStates.change_first_post_message)
     await callback_query.answer()
 
@@ -536,7 +562,10 @@ async def change_first_post_message(message: Message, state: FSMContext):
 # Обработчик изменения числа удаляемых сообщений
 @router.callback_query(lambda c: c.data == 'change_delete_count')
 async def prompt_for_new_delete_count(callback_query: CallbackQuery, state: FSMContext):
-    await callback_query.message.answer("Введите новое число сообщений для удаления:")
+    counter = await get_setting("delete_message_count")
+    await callback_query.message.answer(f"<b>Число удаляемых сообщений сейчас:\t<i>{counter}</i></b>\n\nВведите новое число сообщений для удаления:", parse_mode=ParseMode.HTML,reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[[InlineKeyboardButton(text="❌ Отмена", callback_data="close_message_and_state")]]
+            ))
     await state.set_state(FunctionStates.change_delete_message_count)
     await callback_query.answer()
 
@@ -555,11 +584,26 @@ async def change_delete_message_count(message: Message, state: FSMContext):
     except ValueError:
         await message.answer("Пожалуйста, введите корректное число.")
 
+
+
+
+
 # Обработчик закрытия сообщения
 @router.callback_query(lambda c: c.data == 'close_message')
 async def close_message(callback_query: CallbackQuery):
     await callback_query.message.delete()
     await callback_query.answer()
+
+# Обработчик закрытия сообщения
+@router.callback_query(lambda c: c.data == 'close_message_and_state')
+async def close_message_and_state(callback_query: CallbackQuery,state: FSMContext):
+    await callback_query.message.delete()
+    await state.clear()
+    await callback_query.answer()
+
+
+
+
 
 # Обработчик для разбана пользователей с мутами < 3
 @router.callback_query(lambda c: c.data == 'unban_users_with_less_than_3_mutes')
