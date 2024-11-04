@@ -313,30 +313,30 @@ async def handle_group_message(message: Message):
     #         last_command_times[chat_id] = current_time
     #         await message.reply(f'Привет {message.from_user.full_name}{rules}',parse_mode=ParseMode.HTML)    
 
-    # if message.sender_chat and message.sender_chat.id == CHANNEL_ID and not thread_id:
-    #     try:
-    #         await message.reply(first_post_message)
-    #         logger.info(f"Отправлено первое сообщение в ответ на пост ID: {message_id} в чате ID: {chat_id}")
-    #         message_counts[chat_id][message_id] = 0
-    #     except Exception as e:
-    #         logger.error(f"Ошибка при отправке первого сообщения: {e}")
-    #     return
+    if message.sender_chat and message.sender_chat.id == CHANNEL_ID and not thread_id:
+        try:
+            await message.reply(first_post_message)
+            logger.info(f"Отправлено первое сообщение в ответ на пост ID: {message_id} в чате ID: {chat_id}")
+            message_counts[chat_id][message_id] = 0
+        except Exception as e:
+            logger.error(f"Ошибка при отправке первого сообщения: {e}")
+        return
 
-    # if thread_id and thread_id in message_counts[chat_id]:
-    #     delete_count = message_counts[chat_id][thread_id]
+    if thread_id and thread_id in message_counts[chat_id]:
+        delete_count = message_counts[chat_id][thread_id]
 
-    #     if delete_count < delete_message_count:
-    #         try:
-    #             await message.delete()
-    #             # logger.info(f"Удалено сообщение ID: {message_id} в треде ID: {thread_id}")
-    #             delete_count += 1
-    #             message_counts[chat_id][thread_id] = delete_count
+        if delete_count < delete_message_count:
+            try:
+                await message.delete()
+                # logger.info(f"Удалено сообщение ID: {message_id} в треде ID: {thread_id}")
+                delete_count += 1
+                message_counts[chat_id][thread_id] = delete_count
 
-    #             if delete_count >= delete_message_count:
-    #                 del message_counts[chat_id][thread_id]
-    #                 # logger.info(f"Достигнуто максимальное количество удалений для треда ID: {thread_id}")
-    #         except Exception as e:
-    #             logger.error(f"Ошибка при удалении сообщения: {e}")
+                if delete_count >= delete_message_count:
+                    del message_counts[chat_id][thread_id]
+                    # logger.info(f"Достигнуто максимальное количество удалений для треда ID: {thread_id}")
+            except Exception as e:
+                logger.error(f"Ошибка при удалении сообщения: {e}")
 
 
 
