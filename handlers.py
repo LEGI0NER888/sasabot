@@ -1,5 +1,6 @@
 # handlers.py
 
+
 import re
 import logging
 from aiogram import F, Router
@@ -243,9 +244,24 @@ async def remove_words_handler(message: Message, state: FSMContext):
 
 # Функция для создания регулярного выражения
 def create_regex_pattern(word):
+    # Экранируем каждую букву и добавляем паттерн для пробелов и спецсимволов
     escaped_letters = map(re.escape, word)
-    pattern = r'\W*'.join(escaped_letters)
-    return pattern
+    pattern = '[^A-Za-zА-Яа-яЁё]*'.join(escaped_letters)
+    return rf'\b{pattern}\b'  # Добавляем \b для границ слова, чтобы избегать случайных совпадений
+
+def transliterate_to_cyrillic(text):
+    translit_map = {
+        'a': 'а', 'b': 'б', 'v': 'в', 'g': 'г', 'd': 'д',
+        'e': 'е', 'z': 'з', 'i': 'и', 'k': 'к', 'l': 'л',
+        'm': 'м', 'n': 'н', 'o': 'о', 'p': 'п', 'r': 'р',
+        's': 'с', 't': 'т', 'u': 'у', 'f': 'ф', 'h': 'х',
+        'c': 'ц', 'y': 'у', 'w': 'ш', 'x': 'кс', 'q': 'к',
+        # Добавьте дополнительные соответствия по необходимости
+    }
+    result = ''
+    for char in text:
+        result += translit_map.get(char, char)
+    return result
 
 # Обработчик сообщений в группе
 @router.message(F.chat.id == GROUP_ID)
@@ -282,7 +298,7 @@ async def handle_group_message(message: Message):
     if message.sender_chat and message.sender_chat.id == CHANNEL_ID and not thread_id:
         try:
             await message.reply(first_post_message)
-            # logger.info(f"Отправлено первое сообщение в ответ на пост ID: {message_id} в чате ID: {chat_id}")
+            logger.info(f"Отправлено первое сообщение в ответ на пост ID: {message_id} в чате ID: {chat_id}")
             message_counts[chat_id][message_id] = 0
         except Exception as e:
             logger.error(f"Ошибка при отправке первого сообщения: {e}")
@@ -304,22 +320,34 @@ async def handle_group_message(message: Message):
             except Exception as e:
                 logger.error(f"Ошибка при удалении сообщения: {e}")
 
+    # Проверка на запрещённые слова
     if text:
         forbidden_words = await get_forbidden_words()
+        
+        # Проверка на превышение длины сообщения
         if len(text) > 300:
-            await message.delete()
-        threshold = 75
-        lower_text = text.lower()
+            try:
+                await message.delete()
+            except Exception as e:
+                logger.error(f"Ошибка при удалении длинного сообщения: {e}")
+            return
+
+        lower_text = transliterate_to_cyrillic(text.lower())
+
+        threshold = 70  # Порог схожести для нечеткого сравнения
+
         for word in forbidden_words:
-            similarity = fuzz.ratio(lower_text, word)
             pattern = create_regex_pattern(word)
+            similarity = fuzz.ratio(lower_text, word.lower())
+
+            # Удаление сообщения, если обнаружено совпадение с запрещенным словом
             if re.search(pattern, lower_text) or similarity >= threshold:
                 try:
                     await message.delete()
-                    # logger.info(f"Удалено сообщение {message.message_id} с запрещённым словом '{word}'")
+                    logger.info(f"Удалено сообщение {message.message_id} с запрещённым словом '{word}'")
                 except Exception as e:
                     logger.error(f"Ошибка при удалении сообщения {message.message_id}: {e}")
-                break
+                break  # Останавливаем проверку, если сообщение уже удалено
 
 # Обработчик для показа перманентно забаненных пользователей с пагинацией
 @router.callback_query(lambda c: c.data.startswith('show_permanently_banned_users'))

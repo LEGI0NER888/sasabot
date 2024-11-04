@@ -85,6 +85,7 @@ class AntiSpamMiddleware(BaseMiddleware):
 
     async def handle_spammer(self, event, user_id, chat_id, reason):
         current_time = datetime.now()
+        
         try:
             await event.bot.delete_message(chat_id=chat_id, message_id=event.message_id)
             user_data = await get_user(user_id)
@@ -93,7 +94,7 @@ class AntiSpamMiddleware(BaseMiddleware):
 
             user_data['mute_count'] += 1
             user_data['last_mute_time'] = current_time
-
+            
             await add_or_update_user(user_id, chat_id, user_data['mute_count'], user_data['last_mute_time'])
             self.logger.info(f"User {user_id} received {user_data['mute_count']} mutes.")
 
@@ -104,7 +105,9 @@ class AntiSpamMiddleware(BaseMiddleware):
                     permissions=ChatPermissions(can_send_messages=False)
                 )
                 self.logger.info(f"User {user_id} temporarily muted for 10 seconds for {reason}.")
+                
                 asyncio.create_task(self.unmute_user_after_delay(event.bot, chat_id, user_id, delay=10))
+                
             elif user_data['mute_count'] == 2:
                 await event.bot.restrict_chat_member(
                     chat_id=chat_id,
