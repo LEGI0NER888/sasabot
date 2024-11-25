@@ -90,12 +90,15 @@ class AntiSpamMiddleware(BaseMiddleware):
             await event.bot.delete_message(chat_id=chat_id, message_id=event.message_id)
             user_data = await get_user(user_id)
             if not user_data:
-                user_data = {'user_id': user_id, 'chat_id': chat_id, 'mute_count': 0, 'last_mute_time': None}
-
+                user_data = {'user_id': user_id, 'chat_id': chat_id, 'mute_count': 0, 'last_mute_time': None,'status': 'normal'}
+            else:
+            # Убеждаемся, что статус присутствует
+                user_data.setdefault('status', 'normal')
+          
             user_data['mute_count'] += 1
             user_data['last_mute_time'] = current_time
             
-            await add_or_update_user(user_id, chat_id, user_data['mute_count'], user_data['last_mute_time'])
+            await add_or_update_user(user_id, chat_id, user_data['mute_count'], user_data['last_mute_time'], status=user_data['status'])
             self.logger.info(f"User {user_id} received {user_data['mute_count']} mutes.")
 
             if user_data['mute_count'] == 1:

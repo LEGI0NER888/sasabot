@@ -17,6 +17,10 @@ cache_lock = asyncio.Lock()
 forbidden_words_cache = set()
 settings_cache = {}
 
+# Кэши для запрещённых эмодзи и слов в никнеймах
+forbidden_nickname_emojis_cache = set()
+forbidden_nickname_words_cache = set()
+
 # Функция для инициализации базы данных и загрузки данных
 async def init_db():
     global db_connection
@@ -29,12 +33,14 @@ async def init_db():
         )
     ''')
 
+    
     await db_connection.execute('''
         CREATE TABLE IF NOT EXISTS users (
             user_id INTEGER PRIMARY KEY,
             chat_id INTEGER NOT NULL,
             mute_count INTEGER DEFAULT 0,
-            last_mute_time TEXT
+            last_mute_time TEXT,
+            status TEXT DEFAULT 'normal'
         )
     ''')
 
@@ -45,11 +51,28 @@ async def init_db():
         )
     ''')
 
+    # Создание таблицы запрещённых эмодзи в никнеймах
+    await db_connection.execute('''
+        CREATE TABLE IF NOT EXISTS forbidden_nickname_emojis (
+            emoji TEXT PRIMARY KEY
+        )
+    ''')
+
+    # Создание таблицы запрещённых слов в никнеймах
+    await db_connection.execute('''
+        CREATE TABLE IF NOT EXISTS forbidden_nickname_words (
+            word TEXT PRIMARY KEY
+        )
+    ''')
+
+
     await db_connection.commit()
 
     # Инициализируем кэши
     await load_forbidden_words()
     await load_settings()
+    await load_forbidden_nickname_emojis()
+    await load_forbidden_nickname_words()
 
     if 'anti_spam_enabled' not in settings_cache:
         await update_setting('anti_spam_enabled', '1')
@@ -122,31 +145,7 @@ async def update_setting(key, value):
         await db_connection.commit()
     logger.info(f"Обновлено значение настройки: {key} = {value}")
 
-# Функции для работы с пользователями
 
-async def get_user(user_id):
-    async with db_connection.execute('SELECT user_id, chat_id, mute_count, last_mute_time FROM users WHERE user_id = ?', (user_id,)) as cursor:
-        row = await cursor.fetchone()
-        if row:
-            return {
-                'user_id': row[0],
-                'chat_id': row[1],
-                'mute_count': row[2],
-                'last_mute_time': datetime.fromisoformat(row[3]) if row[3] else None
-            }
-    return None
-
-async def add_or_update_user(user_id, chat_id, mute_count, last_mute_time):
-    await db_connection.execute('''
-        INSERT INTO users (user_id, chat_id, mute_count, last_mute_time)
-        VALUES (?, ?, ?, ?)
-        ON CONFLICT(user_id) DO UPDATE SET
-            chat_id=excluded.chat_id,
-            mute_count=excluded.mute_count,
-            last_mute_time=excluded.last_mute_time
-    ''', (user_id, chat_id, mute_count, last_mute_time.isoformat() if last_mute_time else None))
-    await db_connection.commit()
-    # logger.info(f"Обновлена информация о пользователе {user_id}")
 
 async def reset_mute_counts():
     await db_connection.execute('''
@@ -178,3 +177,176 @@ async def get_users_with_mutes_less_than_3():
         async for row in cursor:
             users.append({'user_id': row[0], 'chat_id': row[1]})
     return users
+
+
+
+#########################################
+#########################################
+
+# Новые функции для загрузки запрещённых эмодзи в никнеймах
+async def load_forbidden_nickname_emojis():
+    async with cache_lock:
+        forbidden_nickname_emojis_cache.clear()
+        async with db_connection.execute('SELECT emoji FROM forbidden_nickname_emojis') as cursor:
+            async for row in cursor:
+                forbidden_nickname_emojis_cache.add(row[0])
+    logger.info(f"Загружены запрещённые эмодзи в никнеймах: {forbidden_nickname_emojis_cache}")
+
+# Получение списка запрещённых эмодзи в никнеймах
+async def get_forbidden_nickname_emojis():
+    async with cache_lock:
+        return forbidden_nickname_emojis_cache.copy()
+
+# Добавление запрещённого эмодзи в никнейме
+async def add_forbidden_nickname_emoji(emoji):
+    async with cache_lock:
+        if emoji not in forbidden_nickname_emojis_cache:
+            await db_connection.execute('INSERT OR IGNORE INTO forbidden_nickname_emojis (emoji) VALUES (?)', (emoji,))
+            await db_connection.commit()
+            forbidden_nickname_emojis_cache.add(emoji)
+            logger.info(f"Добавлено запрещённое эмодзи в никнейме: {emoji}")
+
+# Удаление запрещённого эмодзи в никнейме
+async def remove_forbidden_nickname_emoji(emoji):
+    async with cache_lock:
+        if emoji in forbidden_nickname_emojis_cache:
+            await db_connection.execute('DELETE FROM forbidden_nickname_emojis WHERE emoji = ?', (emoji,))
+            await db_connection.commit()
+            forbidden_nickname_emojis_cache.remove(emoji)
+            logger.info(f"Удалено запрещённое эмодзи в никнейме: {emoji}")
+
+# Новые функции для загрузки запрещённых слов в никнеймах
+async def load_forbidden_nickname_words():
+    async with cache_lock:
+        forbidden_nickname_words_cache.clear()
+        async with db_connection.execute('SELECT word FROM forbidden_nickname_words') as cursor:
+            async for row in cursor:
+                forbidden_nickname_words_cache.add(row[0])
+    logger.info(f"Загружены запрещённые слова в никнеймах: {forbidden_nickname_words_cache}")
+
+# Получение списка запрещённых слов в никнеймах
+async def get_forbidden_nickname_words():
+    async with cache_lock:
+        return forbidden_nickname_words_cache.copy()
+
+# Добавление запрещённого слова в никнейме
+async def add_forbidden_nickname_word(word):
+    word_lower = word.lower()
+    async with cache_lock:
+        if word_lower not in forbidden_nickname_words_cache:
+            await db_connection.execute('INSERT OR IGNORE INTO forbidden_nickname_words (word) VALUES (?)', (word_lower,))
+            await db_connection.commit()
+            forbidden_nickname_words_cache.add(word_lower)
+            logger.info(f"Добавлено запрещённое слово в никнейме: {word_lower}")
+
+# Удаление запрещённого слова в никнейме
+async def remove_forbidden_nickname_word(word):
+    word_lower = word.lower()
+    async with cache_lock:
+        if word_lower in forbidden_nickname_words_cache:
+            await db_connection.execute('DELETE FROM forbidden_nickname_words WHERE word = ?', (word_lower,))
+            await db_connection.commit()
+            forbidden_nickname_words_cache.remove(word_lower)
+            logger.info(f"Удалено запрещённое слово в никнейме: {word_lower}")
+
+# Обновление функций get_user и add_or_update_user для учёта новых полей
+async def get_user(user_id):
+    async with db_connection.execute('SELECT user_id, chat_id, mute_count, last_mute_time, status FROM users WHERE user_id = ?', (user_id,)) as cursor:
+        row = await cursor.fetchone()
+        if row:
+            return {
+                'user_id': row[0],
+                'chat_id': row[1],
+                'mute_count': row[2],
+                'last_mute_time': datetime.fromisoformat(row[3]) if row[3] else None,
+                'status': row[4]
+                
+            }
+    return None
+
+async def add_or_update_user(user_id, chat_id, mute_count, last_mute_time, status='normal'):
+    await db_connection.execute('''
+        INSERT INTO users (user_id, chat_id, mute_count, last_mute_time, status)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET
+            chat_id=excluded.chat_id,
+            mute_count=excluded.mute_count,
+            last_mute_time=excluded.last_mute_time,
+            status=excluded.status
+    ''', (user_id, chat_id, mute_count, last_mute_time.isoformat() if last_mute_time else None, status))
+    await db_connection.commit()
+    logger.info(f"Обновлена информация о пользователе {user_id}")
+
+# Функции для получения списка подозрительных и нарушителей
+async def get_suspicious_users():
+    users = []
+    async with db_connection.execute('SELECT user_id, chat_id FROM users WHERE status = "suspicious"') as cursor:
+        async for row in cursor:
+            users.append({'user_id': row[0], 'chat_id': row[1]})
+    return users
+
+async def get_violator_users():
+    users = []
+    async with db_connection.execute('SELECT user_id, chat_id FROM users WHERE status = "violator"') as cursor:
+        async for row in cursor:
+            users.append({'user_id': row[0], 'chat_id': row[1]})
+    return users
+
+async def delete_user(user_id):
+    
+    await db_connection.execute('DELETE FROM users WHERE user_id = ?', (user_id,))
+    await db_connection.commit()
+    logger.info(f"Пользователь {user_id} удалён из базы данных")
+
+
+#################################
+#################################
+#################################
+
+# Получение списка запрещённых слов в никнеймах
+async def get_forbidden_nickname_words():
+    async with cache_lock:
+        return forbidden_nickname_words_cache.copy()
+
+# Добавление запрещённого слова в никнейме
+async def add_forbidden_nickname_word(word):
+    word_lower = word.lower()
+    async with cache_lock:
+        if word_lower not in forbidden_nickname_words_cache:
+            await db_connection.execute('INSERT OR IGNORE INTO forbidden_nickname_words (word) VALUES (?)', (word_lower,))
+            await db_connection.commit()
+            forbidden_nickname_words_cache.add(word_lower)
+            logger.info(f"Добавлено запрещённое слово в никнейме: {word_lower}")
+
+# Удаление запрещённого слова в никнейме
+async def remove_forbidden_nickname_word(word):
+    word_lower = word.lower()
+    async with cache_lock:
+        if word_lower in forbidden_nickname_words_cache:
+            await db_connection.execute('DELETE FROM forbidden_nickname_words WHERE word = ?', (word_lower,))
+            await db_connection.commit()
+            forbidden_nickname_words_cache.remove(word_lower)
+            logger.info(f"Удалено запрещённое слово в никнейме: {word_lower}")
+
+# Получение списка запрещённых эмодзи в никнеймах
+async def get_forbidden_nickname_emojis():
+    async with cache_lock:
+        return forbidden_nickname_emojis_cache.copy()
+
+# Добавление запрещённого эмодзи в никнейме
+async def add_forbidden_nickname_emoji(emoji):
+    async with cache_lock:
+        if emoji not in forbidden_nickname_emojis_cache:
+            await db_connection.execute('INSERT OR IGNORE INTO forbidden_nickname_emojis (emoji) VALUES (?)', (emoji,))
+            await db_connection.commit()
+            forbidden_nickname_emojis_cache.add(emoji)
+            logger.info(f"Добавлено запрещённое эмодзи в никнейме: {emoji}")
+
+# Удаление запрещённого эмодзи в никнейме
+async def remove_forbidden_nickname_emoji(emoji):
+    async with cache_lock:
+        if emoji in forbidden_nickname_emojis_cache:
+            await db_connection.execute('DELETE FROM forbidden_nickname_emojis WHERE emoji = ?', (emoji,))
+            await db_connection.commit()
+            forbidden_nickname_emojis_cache.remove(emoji)
+            logger.info(f"Удалено запрещённое эмодзи в никнейме: {emoji}")

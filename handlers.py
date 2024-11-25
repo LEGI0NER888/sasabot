@@ -19,7 +19,10 @@ from database import (
     get_forbidden_words, add_forbidden_word, remove_forbidden_word,
     clear_forbidden_words, get_setting, update_setting,
     get_user_data, reset_user_mute_count, get_permanently_banned_users,
-    get_users_with_mutes_less_than_3, add_or_update_user
+    get_users_with_mutes_less_than_3,get_user, get_user, add_or_update_user, delete_user,
+    get_suspicious_users, get_violator_users,
+    get_forbidden_nickname_emojis, get_forbidden_nickname_words, add_forbidden_nickname_emoji, 
+    add_forbidden_nickname_word, remove_forbidden_nickname_emoji, remove_forbidden_nickname_word
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -32,6 +35,10 @@ class FunctionStates(StatesGroup):
     change_delete_message_count = State()
     waiting_for_words_to_add = State()
     waiting_for_words_to_remove = State()
+    waiting_for_nickname_words_to_add = State()
+    waiting_for_nickname_words_to_remove = State()
+    waiting_for_nickname_emojis_to_add = State()
+    waiting_for_nickname_emojis_to_remove = State()
 
 # Глобальный словарь для отслеживания количества удалённых сообщений в каждой теме обсуждения
 message_counts = defaultdict(dict)
@@ -55,21 +62,61 @@ async def cmd_start(message: Message):
         anti_spam_status = "Включен" if await get_setting('anti_spam_enabled') == '1' else "Отключен"
         kb = InlineKeyboardMarkup(
             inline_keyboard=[
-                [InlineKeyboardButton(text="➕ Добавить слова ➕", callback_data="add_words")],
-                [InlineKeyboardButton(text="➖ Удалить слова ➖", callback_data="remove_words")],
-                [InlineKeyboardButton(text="⛔️ Показать запрещённые слова ⛔️", callback_data="show_forbidden_words")],
-                [InlineKeyboardButton(text="🧹 [Очистить список слов] 🧹", callback_data="confirm_clear_words")],
+                [InlineKeyboardButton(text="💀 Запретки 💀", callback_data="zapret_words_kb")],
+                [InlineKeyboardButton(text="🤡 Запретные никнеймы 🤡", callback_data="zapret_nicknames_kb")],
+                [InlineKeyboardButton(text="💦 Запретные эмоджи 💦", callback_data="zapret_emoji_kb")],
                 [InlineKeyboardButton(text="🔒 Забаненные 🔒", callback_data="show_permanently_banned_users")],
                 [InlineKeyboardButton(text="🔇 Размут замученных 🔇", callback_data="unban_users_with_less_than_3_mutes")],
-                [InlineKeyboardButton(text=f"⌨️ Антиспам: {anti_spam_status} ⌨️", callback_data="toggle_anti_spam")],
+                [InlineKeyboardButton(text="🔍 Подозрения 🔍", callback_data="suspicions_menu")],
+                [InlineKeyboardButton(text=f"⌨️ [Антиспам: {anti_spam_status}] ⌨️", callback_data="toggle_anti_spam")],
                 [InlineKeyboardButton(text="✉️ [Изменить кол-во удаляемых сообщений] ✉️", callback_data="change_delete_count")],
                 [InlineKeyboardButton(text="✏️ [Редактирование 1-го поста] ✏️", callback_data="change_first_post_message")],
+                
             ]
         )
         await message.answer("Добро пожаловать в админ-панель!", reply_markup=kb)
     else:
         return
+    
+@router.callback_query(lambda c: c.data == 'zapret_words_kb')
+async def zapret_words(callback_query: CallbackQuery):
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="➕ Добавить слова ➕", callback_data="add_words")],
+            [InlineKeyboardButton(text="➖ Удалить слова ➖", callback_data="remove_words")],
+            [InlineKeyboardButton(text="⛔️ Показать запрещённые слова ⛔️", callback_data="show_forbidden_words")],
+            [InlineKeyboardButton(text="🧹 [Очистить список слов] 🧹", callback_data="confirm_clear_words")],
+            [InlineKeyboardButton(text="❌ Закрыть", callback_data="close_message")]
+        ]
+    )
+    await callback_query.message.answer('ЗАПРЕТКИ (В ЧАТЕ)', parse_mode='HTML', reply_markup=kb)
+    await callback_query.answer()
 
+@router.callback_query(lambda c: c.data == 'zapret_nicknames_kb')
+async def zapret_nicknames(callback_query: CallbackQuery):
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="➕ Добавить слова для никнеймов ➕", callback_data="add_nickname_words")],
+            [InlineKeyboardButton(text="➖ Удалить слова для никнеймов ➖", callback_data="remove_nickname_words")],
+            [InlineKeyboardButton(text="⛔️ Показать запрещённые слова в никнеймах ⛔️", callback_data="show_forbidden_nickname_words")],
+            [InlineKeyboardButton(text="❌ Закрыть", callback_data="close_message")]
+        ]
+    )
+    await callback_query.message.answer('ЗАПРЕТНЫЕ НИКНЕЙМЫ', parse_mode='HTML', reply_markup=kb)
+    await callback_query.answer()
+
+@router.callback_query(lambda c: c.data == 'zapret_emoji_kb')
+async def zapret_emoji(callback_query: CallbackQuery):
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="➕ Добавить эмодзи для никнеймов ➕", callback_data="add_nickname_emojis")],
+            [InlineKeyboardButton(text="➖ Удалить эмодзи для никнеймов ➖", callback_data="remove_nickname_emojis")],
+            [InlineKeyboardButton(text="⛔️ Показать запрещённые эмодзи в никнеймах ⛔️", callback_data="show_forbidden_nickname_emojis")],
+            [InlineKeyboardButton(text="❌ Закрыть", callback_data="close_message")]
+        ]
+    )
+    await callback_query.message.answer('ЗАПРЕТНЫЕ ЭМОДЗИ (В НИКАХ)', parse_mode='HTML', reply_markup=kb)
+    await callback_query.answer()
 # Обработчик переключения антиспама
 @router.callback_query(lambda c: c.data == 'toggle_anti_spam')
 async def toggle_anti_spam(callback_query: CallbackQuery):
@@ -267,6 +314,8 @@ rules = """, вот <b>правила чата:</b>
 \n2. Без запреток
 \n3. Спам наказывается <i>временным</i> мутом - особенных нарушителей может <b><i>замутить навсегда!</i></b>"""
 
+
+
 # Обработчик сообщений в группе
 @router.message(F.chat.id == GROUP_ID)
 async def handle_group_message(message: Message):
@@ -275,10 +324,10 @@ async def handle_group_message(message: Message):
     message_id = message.message_id
     thread_id = message.message_thread_id
 
+    user_id = message.from_user.id
+
     if chat_id not in message_counts:
         message_counts[chat_id] = {}
-
-    # logger.info(f"Получено сообщение: chat_id={chat_id}, message_id={message_id}, thread_id={thread_id}")
 
     delete_message_count = int(await get_setting("delete_message_count") or 5)
     first_post_message = await get_setting("first_post_message") or (
@@ -286,7 +335,6 @@ async def handle_group_message(message: Message):
     )
 
     if message.from_user and message.from_user.id == bot.id:
-        # logger.info("Сообщение от бота. Пропускаем.")
         return
 
     if message.entities:
@@ -294,24 +342,35 @@ async def handle_group_message(message: Message):
             if entity.type == 'bot_command':
                 try:
                     await message.delete()
-                    # logger.info(f"Удалена команда от пользователя {message.from_user.id} в чате {chat_id}")
                 except Exception as e:
                     logger.error(f"Ошибка при удалении команды: {e}")
                 return
-        
-    # # Логика обработки команды !правила
-    # if text and text.lower() == '!правила':
-    #     current_time = datetime.now()
-        
-    #     # Получаем время последнего использования команды для этого чата
-    #     last_command_time = last_command_times.get(chat_id)
 
-    #     if last_command_time and (current_time - last_command_time) < timedelta(seconds=90):
-    #         return  # Игнорируем команду
-    #     else:
-    #         # Обновляем время последнего использования для текущего чата
-    #         last_command_times[chat_id] = current_time
-    #         await message.reply(f'Привет {message.from_user.full_name}{rules}',parse_mode=ParseMode.HTML)    
+    # Проверяем, есть ли у пользователя статус
+    user_data = await get_user(user_id)
+
+    if user_data and user_data['status'] in ['suspicious', 'violator']:
+        # Пользователь уже помечен, не нужно повторно проверять
+        pass
+    else:
+        full_name = message.from_user.full_name or ''
+        lower_full_name = full_name.lower()
+        forbidden_emojis = await get_forbidden_nickname_emojis()
+        forbidden_words_nickname = await get_forbidden_nickname_words()
+
+        # Проверка на запрещённые эмодзи
+        has_forbidden_emoji = any(emoji in full_name for emoji in forbidden_emojis)
+        # Проверка на запрещённые слова
+        has_forbidden_word_nickname = any(word in lower_full_name for word in forbidden_words_nickname)
+
+        if has_forbidden_emoji and has_forbidden_word_nickname:
+            # Пользователь является нарушителем
+            await add_or_update_user(user_id, message.chat.id, mute_count=0, last_mute_time=None, status='violator')
+            logger.info(f"Пользователь {user_id} помечен как нарушитель")
+        elif has_forbidden_emoji or has_forbidden_word_nickname:
+            # Пользователь является подозрительным
+            await add_or_update_user(user_id, message.chat.id, mute_count=0, last_mute_time=None, status='suspicious')
+            logger.info(f"Пользователь {user_id} помечен как подозрительный")
 
     if message.sender_chat and message.sender_chat.id == CHANNEL_ID and not thread_id:
         try:
@@ -321,24 +380,20 @@ async def handle_group_message(message: Message):
         except Exception as e:
             logger.error(f"Ошибка при отправке первого сообщения: {e}")
         return
-
+    
     if thread_id and thread_id in message_counts[chat_id]:
         delete_count = message_counts[chat_id][thread_id]
 
         if delete_count < delete_message_count:
             try:
                 await message.delete()
-                # logger.info(f"Удалено сообщение ID: {message_id} в треде ID: {thread_id}")
                 delete_count += 1
                 message_counts[chat_id][thread_id] = delete_count
 
                 if delete_count >= delete_message_count:
                     del message_counts[chat_id][thread_id]
-                    # logger.info(f"Достигнуто максимальное количество удалений для треда ID: {thread_id}")
             except Exception as e:
                 logger.error(f"Ошибка при удалении сообщения: {e}")
-
-
 
     # Проверка на запрещённые слова
     if text:
@@ -369,7 +424,6 @@ async def handle_group_message(message: Message):
                     logger.error(f"Ошибка при удалении сообщения {message.message_id}: {e}")
                 break  # Останавливаем проверку, если сообщение уже удалено
     
-     
 
 
 # Обработчик для показа перманентно забаненных пользователей с пагинацией
@@ -499,7 +553,7 @@ async def select_banned_user(callback_query: CallbackQuery):
         [InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_unban_user")]
     ])
 
-    await callback_query.message.answer(f"Вы хотите разбанить пользователя {callback_query.from_user.username}?", reply_markup=keyboard)
+    await callback_query.message.answer(f"Вы хотите разбанить пользователя {selected_user_id}?", reply_markup=keyboard)
     await callback_query.answer()
 
 # Обработчик отмены разбана
@@ -645,6 +699,7 @@ async def cancel_unban_users(callback_query: CallbackQuery):
 # Обработчик подтверждения разбана
 @router.callback_query(lambda c: c.data == 'unban_users_confirm')
 async def unban_users_confirm(callback_query: CallbackQuery):
+    
     user_id = callback_query.from_user.id
     if not await is_user_admin(user_id):
         return
@@ -665,3 +720,600 @@ async def unban_users_confirm(callback_query: CallbackQuery):
 
     await callback_query.answer("Все пользователи с мутами меньше 3 разблокированы.")
     await callback_query.message.delete()
+
+##############
+###ЭРО-боты###
+##############
+
+# Обработчик для меню "Подозрения"
+@router.callback_query(lambda c: c.data == 'suspicions_menu')
+async def show_suspicions_menu(callback_query: CallbackQuery):
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="⚠️ Подозрительные", callback_data="show_suspicious_users")],
+        [InlineKeyboardButton(text="🚫 Нарушители", callback_data="show_violator_users")],
+        [InlineKeyboardButton(text="❌ Закрыть", callback_data="close_message")]
+    ])
+    await callback_query.message.answer("Выберите категорию:", reply_markup=kb)
+    await callback_query.answer()
+
+# Обработчик для показа списка подозрительных пользователей
+@router.callback_query(lambda c: c.data.startswith('show_suspicious_users'))
+async def show_suspicious_users(callback_query: CallbackQuery):
+    user_id = callback_query.from_user.id
+    if not await is_user_admin(user_id):
+        return
+
+    suspicious_users = await get_suspicious_users()
+
+    if suspicious_users:
+        users_per_page = 10
+        page_number = 1  # Для простоты, реализация пагинации опущена
+        keyboard_buttons = []
+        for user in suspicious_users:
+            try:
+                user_chat = await bot.get_chat(user['user_id'])
+                user_full_name = user_chat.full_name
+            except:
+                user_full_name = f"ID: {user['user_id']}"
+            user_text = f"{user_full_name}"
+            button = [InlineKeyboardButton(text=user_text, callback_data=f"select_suspicious_user_{user['user_id']}")]
+            keyboard_buttons.append(button)
+
+        kb = InlineKeyboardMarkup(
+            inline_keyboard=keyboard_buttons + [
+                [InlineKeyboardButton(text="🔒 Забанить всех", callback_data="ban_all_suspicious_users")],
+                [InlineKeyboardButton(text="❌ Закрыть", callback_data="close_message")]
+            ]
+        )
+
+        await callback_query.message.answer("Список подозрительных пользователей:", reply_markup=kb)
+    else:
+        await callback_query.message.answer("Нет подозрительных пользователей.", reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[[InlineKeyboardButton(text="❌ Закрыть", callback_data="close_message")]]
+        ))
+    await callback_query.answer()
+
+# Обработчик для показа списка нарушителей
+@router.callback_query(lambda c: c.data.startswith('show_violator_users'))
+async def show_violator_users(callback_query: CallbackQuery):
+    user_id = callback_query.from_user.id
+    if not await is_user_admin(user_id):
+        return
+
+    violator_users = await get_violator_users()
+
+    if violator_users:
+        users_per_page = 10
+        page_number = 1  # Для простоты, реализация пагинации опущена
+        keyboard_buttons = []
+        for user in violator_users:
+            # Получаем полное имя пользователя через API
+            try:
+                user_chat = await bot.get_chat(user['user_id'])
+                user_full_name = user_chat.full_name
+            except:
+                user_full_name = f"ID: {user['user_id']}"
+            user_text = f"{user_full_name}"
+            button = [InlineKeyboardButton(text=user_text, callback_data=f"select_violator_user_{user['user_id']}")]
+            keyboard_buttons.append(button)
+
+        kb = InlineKeyboardMarkup(
+            inline_keyboard=keyboard_buttons + [
+                [InlineKeyboardButton(text="🔒 Забанить всех", callback_data="ban_all_violator_users")],
+                [InlineKeyboardButton(text="❌ Закрыть", callback_data="close_message")]
+            ]
+        )
+
+        await callback_query.message.answer("Список нарушителей:", reply_markup=kb)
+    else:
+        await callback_query.message.answer("Нет нарушителей.", reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[[InlineKeyboardButton(text="❌ Закрыть", callback_data="close_message")]]
+        ))
+    await callback_query.answer()
+
+# Обработчик выбора подозрительного пользователя
+@router.callback_query(lambda c: c.data.startswith('select_suspicious_user_'))
+async def select_suspicious_user(callback_query: CallbackQuery):
+    user_id = callback_query.from_user.id
+    if not await is_user_admin(user_id):
+        return
+
+    selected_user_id = int(callback_query.data.split('_')[-1])
+    # Получаем информацию о пользователе
+    user_data = await get_user_data(selected_user_id)
+    if user_data:
+        try:
+            user_chat = await bot.get_chat(selected_user_id)
+            user_full_name = user_chat.full_name
+            user_profile_link = f"[{user_full_name}](tg://user?id={selected_user_id})"
+        except:
+            user_profile_link = f"Пользователь с ID {selected_user_id}"
+
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="✅ Забанить", callback_data=f"ban_suspicious_user_{selected_user_id}")],
+            [InlineKeyboardButton(text="🚫 Удалить из пула", callback_data=f"remove_suspicious_user_{selected_user_id}")],
+            [InlineKeyboardButton(text="❌ Отмена", callback_data="close_message")]
+        ])
+
+        await callback_query.message.answer(
+            f"Выберите действие для пользователя {user_profile_link}:",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=keyboard
+        )
+        await callback_query.answer()
+    else:
+        await callback_query.answer("Пользователь не найден.", show_alert=True)
+        await callback_query.message.delete()
+
+# Обработчик бана подозрительного пользователя
+@router.callback_query(lambda c: c.data.startswith('ban_suspicious_user_'))
+async def ban_suspicious_user(callback_query: CallbackQuery):
+    admin_user_id = callback_query.from_user.id
+    if not await is_user_admin(admin_user_id):
+        return
+
+    selected_user_id = int(callback_query.data.split('_')[-1])
+    user_data = await get_user_data(selected_user_id)
+
+    if user_data:
+        chat_id = user_data['chat_id']
+        try:
+            await callback_query.bot.ban_chat_member(chat_id=chat_id, user_id=selected_user_id)
+            await delete_user(selected_user_id)
+            await callback_query.answer(f"Пользователь {selected_user_id} забанен.", show_alert=True)
+            await callback_query.message.delete()
+            logger.info(f"Пользователь {selected_user_id} забанен администратором {admin_user_id}.")
+        except Exception as e:
+            logger.error(f"Ошибка при бане пользователя {selected_user_id}: {e}")
+            await callback_query.answer(f"Не удалось забанить пользователя {selected_user_id}.", show_alert=True)
+    else:
+        await callback_query.answer(f"Пользователь {selected_user_id} не найден.", show_alert=True)
+        await callback_query.message.delete()
+
+# Обработчик удаления подозрительного пользователя из пула
+@router.callback_query(lambda c: c.data.startswith('remove_suspicious_user_'))
+async def remove_suspicious_user(callback_query: CallbackQuery):
+    chat_id = GROUP_ID
+    user_id = callback_query.from_user.id
+    if not await is_user_admin(user_id):
+        return
+
+    selected_user_id = int(callback_query.data.split('_')[-1])
+    await bot.restrict_chat_member(
+                chat_id=chat_id,
+                user_id=selected_user_id,
+                permissions=ChatPermissions(
+                    can_send_messages=True
+                )
+            )
+    await delete_user(selected_user_id)
+    await callback_query.answer(f"Пользователь {selected_user_id} удалён из пула.", show_alert=True)
+    # await send_nickname_change_request(selected_user_id)
+    await callback_query.message.delete()
+
+# async def send_nickname_change_request(user_id):
+#     try:
+#         message_text = "Здравствуйте! Ваш никнейм содержит запрещённые слова или эмодзи. Пожалуйста, измените его, чтобы продолжить общение в чате."
+#         await bot.send_message(chat_id=user_id, text=message_text)
+#         logger.info(f"Отправлено сообщение пользователю {user_id} с просьбой сменить никнейм.")
+#     except Exception as e:
+#         logger.error(f"Не удалось отправить сообщение пользователю {user_id}: {e}")
+
+# Обработчик бана всех подозрительных пользователей
+@router.callback_query(lambda c: c.data == 'ban_all_suspicious_users')
+async def ban_all_suspicious_users(callback_query: CallbackQuery):
+    user_id = callback_query.from_user.id
+    if not await is_user_admin(user_id):
+        return
+
+    # Получаем список подозрительных пользователей
+    suspicious_users = await get_suspicious_users()
+
+    if not suspicious_users:
+        await callback_query.answer("Нет подозрительных пользователей для бана.", show_alert=True)
+        await callback_query.message.delete()
+        return
+
+    # Спрашиваем подтверждение у администратора
+    confirm_kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✅ Да, забанить всех", callback_data="ban_all_suspicious_confirm")],
+        [InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_ban_all_suspicious")]
+    ])
+
+    await callback_query.message.answer(
+        f"Вы уверены, что хотите забанить всех подозрительных пользователей ({len(suspicious_users)} чел.)?",
+        reply_markup=confirm_kb
+    )
+    await callback_query.answer()
+
+# Обработчик отмены бана всех подозрительных пользователей
+@router.callback_query(lambda c: c.data == 'cancel_ban_all_suspicious')
+async def cancel_ban_all_suspicious(callback_query: CallbackQuery):
+    await callback_query.answer("Бан отменён.")
+    await callback_query.message.delete()
+
+# Обработчик подтверждения бана всех подозрительных пользователей
+@router.callback_query(lambda c: c.data == 'ban_all_suspicious_confirm')
+async def ban_all_suspicious_confirm(callback_query: CallbackQuery):
+    admin_user_id = callback_query.from_user.id
+    if not await is_user_admin(admin_user_id):
+        return
+
+    suspicious_users = await get_suspicious_users()
+
+    if not suspicious_users:
+        await callback_query.answer("Нет подозрительных пользователей для бана.", show_alert=True)
+        await callback_query.message.delete()
+        return
+
+    success_count = 0
+    for user in suspicious_users:
+        user_id = user['user_id']
+        chat_id = user['chat_id']
+        try:
+            # Баним пользователя
+            await callback_query.bot.ban_chat_member(chat_id=chat_id, user_id=user_id)
+            # Удаляем пользователя из пула
+            await delete_user(user_id)
+            success_count += 1
+            logger.info(f"Пользователь {user_id} забанен администратором {admin_user_id}.")
+        except Exception as e:
+            logger.error(f"Ошибка при бане пользователя {user_id}: {e}")
+
+    await callback_query.answer(f"Забанено пользователей: {success_count}.", show_alert=True)
+    await callback_query.message.delete()
+
+# Обработчик выбора нарушителя
+@router.callback_query(lambda c: c.data.startswith('select_violator_user_'))
+async def select_violator_user(callback_query: CallbackQuery):
+    user_id = callback_query.from_user.id
+    if not await is_user_admin(user_id):
+        return
+
+    selected_user_id = int(callback_query.data.split('_')[-1])
+    user_data = await get_user_data(selected_user_id)
+    if user_data:
+        try:
+            user_chat = await bot.get_chat(selected_user_id)
+            user_full_name = user_chat.full_name
+            user_profile_link = f"[{user_full_name}](tg://user?id={selected_user_id})"
+        except:
+            user_profile_link = f"Пользователь с ID {selected_user_id}"
+
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="✅ Забанить", callback_data=f"ban_violator_user_{selected_user_id}")],
+            [InlineKeyboardButton(text="🚫 Удалить из пула", callback_data=f"remove_violator_user_{selected_user_id}")],
+            [InlineKeyboardButton(text="❌ Отмена", callback_data="close_message")]
+        ])
+
+        await callback_query.message.answer(
+            f"Выберите действие для пользователя {user_profile_link}:",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=keyboard
+        )
+        await callback_query.answer()
+    else:
+        await callback_query.answer("Пользователь не найден.", show_alert=True)
+        await callback_query.message.delete()
+
+# Обработчик бана нарушителя
+@router.callback_query(lambda c: c.data.startswith('ban_violator_user_'))
+async def ban_violator_user(callback_query: CallbackQuery):
+    admin_user_id = callback_query.from_user.id
+    if not await is_user_admin(admin_user_id):
+        return
+
+    selected_user_id = int(callback_query.data.split('_')[-1])
+    user_data = await get_user_data(selected_user_id)
+
+    if user_data:
+        chat_id = user_data['chat_id']
+        try:
+            await callback_query.bot.ban_chat_member(chat_id=chat_id, user_id=selected_user_id)
+            await delete_user(selected_user_id)
+            await callback_query.answer(f"Пользователь {selected_user_id} забанен.", show_alert=True)
+            await callback_query.message.delete()
+            logger.info(f"Пользователь {selected_user_id} забанен администратором {admin_user_id}.")
+        except Exception as e:
+            logger.error(f"Ошибка при бане пользователя {selected_user_id}: {e}")
+            await callback_query.answer(f"Не удалось забанить пользователя {selected_user_id}.", show_alert=True)
+    else:
+        await callback_query.answer(f"Пользователь {selected_user_id} не найден.", show_alert=True)
+        await callback_query.message.delete()
+
+# Обработчик удаления нарушителя из пула
+@router.callback_query(lambda c: c.data.startswith('remove_violator_user_'))
+async def remove_violator_user(callback_query: CallbackQuery):
+    user_id = callback_query.from_user.id
+    chat_id = callback_query.message.chat.id
+    if not await is_user_admin(user_id):
+        return
+
+    selected_user_id = int(callback_query.data.split('_')[-1])
+    await bot.restrict_chat_member(
+                chat_id=chat_id,
+                user_id=selected_user_id,
+                permissions=ChatPermissions(
+                    can_send_messages=True
+                )
+            )
+    await delete_user(selected_user_id)
+    await callback_query.answer(f"Пользователь {selected_user_id} удалён из пула.", show_alert=True)
+    # await send_nickname_change_request(selected_user_id)
+    await callback_query.message.delete()
+
+# Обработчик бана всех нарушителей
+@router.callback_query(lambda c: c.data == 'ban_all_violator_users')
+async def ban_all_violator_users(callback_query: CallbackQuery):
+    user_id = callback_query.from_user.id
+    if not await is_user_admin(user_id):
+        return
+
+    violator_users = await get_violator_users()
+
+    if not violator_users:
+        await callback_query.answer("Нет нарушителей для бана.", show_alert=True)
+        await callback_query.message.delete()
+        return
+
+    confirm_kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✅ Да, забанить всех", callback_data="ban_all_violators_confirm")],
+        [InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_ban_all_violators")]
+    ])
+
+    await callback_query.message.answer(
+        f"Вы уверены, что хотите забанить всех нарушителей ({len(violator_users)} чел.)?",
+        reply_markup=confirm_kb
+    )
+    await callback_query.answer()
+
+@router.callback_query(lambda c: c.data == 'cancel_ban_all_violators')
+async def cancel_ban_all_violators(callback_query: CallbackQuery):
+    await callback_query.answer("Бан отменён.")
+    await callback_query.message.delete()
+
+@router.callback_query(lambda c: c.data == 'ban_all_violators_confirm')
+async def ban_all_violators_confirm(callback_query: CallbackQuery):
+    admin_user_id = callback_query.from_user.id
+    if not await is_user_admin(admin_user_id):
+        return
+
+    violator_users = await get_violator_users()
+
+    if not violator_users:
+        await callback_query.answer("Нет нарушителей для бана.", show_alert=True)
+        await callback_query.message.delete()
+        return
+
+    success_count = 0
+    for user in violator_users:
+        user_id = user['user_id']
+        chat_id = user['chat_id']
+        try:
+            await callback_query.bot.ban_chat_member(chat_id=chat_id, user_id=user_id)
+            await delete_user(user_id)
+            success_count += 1
+            logger.info(f"Пользователь {user_id} забанен администратором {admin_user_id}.")
+        except Exception as e:
+            logger.error(f"Ошибка при бане пользователя {user_id}: {e}")
+
+    await callback_query.answer(f"Забанено пользователей: {success_count}.", show_alert=True)
+    await callback_query.message.delete()
+
+
+###################################################
+####добавление, удаление подозрений в никнеймах####
+###################################################
+
+@router.callback_query(lambda c: c.data == "add_nickname_words")
+async def process_add_nickname_words(callback_query: CallbackQuery, state: FSMContext):
+    user_id = callback_query.from_user.id
+    if not await is_user_admin(user_id):
+        return
+
+    await callback_query.message.answer(
+        "Пожалуйста, введите слова для <b>добавления в запрещённые никнеймы</b>. "
+        "Вы можете вводить несколько слов через пробел или фразы в кавычках.\n"
+        "Пример: <code>слово1 слово2 \"фраза для бана\"</code>",
+        parse_mode='HTML'
+    )
+    await state.set_state(FunctionStates.waiting_for_nickname_words_to_add)
+    await callback_query.answer()
+
+
+@router.message(FunctionStates.waiting_for_nickname_words_to_add)
+async def add_nickname_words_handler(message: Message, state: FSMContext):
+    user_id = message.from_user.id
+    if not await is_user_admin(user_id):
+        return
+
+    text = message.text
+
+    import shlex
+    try:
+        words_to_add = shlex.split(text)
+    except ValueError as e:
+        await message.answer(f"Ошибка при обработке введённых данных: {e}")
+        return
+
+    added_words = []
+    for word in words_to_add:
+        await add_forbidden_nickname_word(word)
+        added_words.append(word.lower())
+
+    if added_words:
+        await message.answer(
+            f"Слова/фразы <b>{', '.join(added_words)}</b> добавлены в список запрещённых слов для никнеймов.",
+            parse_mode='HTML'
+        )
+    else:
+        await message.answer("Указанные слова/фразы уже были в списке запрещённых слов для никнеймов.")
+
+    await state.clear()
+
+
+@router.callback_query(lambda c: c.data == "remove_nickname_words")
+async def process_remove_nickname_words(callback_query: CallbackQuery, state: FSMContext):
+    user_id = callback_query.from_user.id
+    if not await is_user_admin(user_id):
+        return
+
+    await callback_query.message.answer(
+        "Пожалуйста, введите слова для <b>удаления из запрещённых никнеймов</b>. "
+        "Вы можете вводить несколько слов через пробел или фразы в кавычках.\n"
+        "Пример: <code>слово1 слово2 \"фраза для бана\"</code>",
+        parse_mode='HTML'
+    )
+    await state.set_state(FunctionStates.waiting_for_nickname_words_to_remove)
+    await callback_query.answer()
+
+
+@router.message(FunctionStates.waiting_for_nickname_words_to_remove)
+async def remove_nickname_words_handler(message: Message, state: FSMContext):
+    user_id = message.from_user.id
+    if not await is_user_admin(user_id):
+        return
+
+    text = message.text
+
+    import shlex
+    try:
+        words_to_remove = shlex.split(text)
+    except ValueError as e:
+        await message.answer(f"Ошибка при обработке введённых данных: {e}")
+        return
+
+    removed_words = []
+    for word in words_to_remove:
+        await remove_forbidden_nickname_word(word)
+        removed_words.append(word.lower())
+
+    if removed_words:
+        await message.answer(
+            f"Слова/фразы <b>{', '.join(removed_words)}</b> удалены из списка запрещённых слов для никнеймов.",
+            parse_mode='HTML'
+        )
+    else:
+        await message.answer("Указанных слов/фраз не было в списке запрещённых слов для никнеймов.")
+
+    await state.clear()
+
+
+@router.callback_query(lambda c: c.data == 'show_forbidden_nickname_words')
+async def process_show_forbidden_nickname_words(callback_query: CallbackQuery):
+    user_id = callback_query.from_user.id
+    if not await is_user_admin(user_id):
+        return
+
+    forbidden_nickname_words = await get_forbidden_nickname_words()
+    if forbidden_nickname_words:
+        words_list = ', '.join(sorted(forbidden_nickname_words))
+        message_text = f"🚫Запрещённые слова в никнеймах:\n{words_list}"
+    else:
+        message_text = "Список запрещённых слов в никнеймах пуст"
+
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Закрыть", callback_data="close_message")]
+        ]
+    )
+    await callback_query.message.answer(message_text, parse_mode='HTML', reply_markup=kb)
+    await callback_query.answer()
+
+
+@router.callback_query(lambda c: c.data == "add_nickname_emojis")
+async def process_add_nickname_emojis(callback_query: CallbackQuery, state: FSMContext):
+    user_id = callback_query.from_user.id
+    if not await is_user_admin(user_id):
+        return
+
+    await callback_query.message.answer(
+        "Пожалуйста, введите эмодзи для <b>добавления в запрещённые никнеймы</b>. "
+        "Вы можете вводить несколько эмодзи через пробел.\n"
+        "Пример: 😈 🤬",
+        parse_mode='HTML'
+    )
+    await state.set_state(FunctionStates.waiting_for_nickname_emojis_to_add)
+    await callback_query.answer()
+
+
+@router.message(FunctionStates.waiting_for_nickname_emojis_to_add)
+async def add_nickname_emojis_handler(message: Message, state: FSMContext):
+    user_id = message.from_user.id
+    if not await is_user_admin(user_id):
+        return
+
+    emojis_to_add = message.text.strip().split()
+    added_emojis = []
+    for emoji in emojis_to_add:
+        await add_forbidden_nickname_emoji(emoji)
+        added_emojis.append(emoji)
+
+    if added_emojis:
+        await message.answer(
+            f"Эмодзи <b>{' '.join(added_emojis)}</b> добавлены в список запрещённых эмодзи для никнеймов.",
+            parse_mode='HTML'
+        )
+    else:
+        await message.answer("Указанные эмодзи уже были в списке запрещённых эмодзи для никнеймов.")
+
+    await state.clear()
+
+@router.callback_query(lambda c: c.data == "remove_nickname_emojis")
+async def process_remove_nickname_emojis(callback_query: CallbackQuery, state: FSMContext):
+    user_id = callback_query.from_user.id
+    if not await is_user_admin(user_id):
+        return
+
+    await callback_query.message.answer(
+        "Пожалуйста, введите эмодзи для <b>удаления из запрещённых никнеймов</b>. "
+        "Вы можете вводить несколько эмодзи через пробел.\n"
+        "Пример: 😈 🤬",
+        parse_mode='HTML'
+    )
+    await state.set_state(FunctionStates.waiting_for_nickname_emojis_to_remove)
+    await callback_query.answer()
+
+@router.message(FunctionStates.waiting_for_nickname_emojis_to_remove)
+async def remove_nickname_emojis_handler(message: Message, state: FSMContext):
+    user_id = message.from_user.id
+    if not await is_user_admin(user_id):
+        return
+
+    emojis_to_remove = message.text.strip().split()
+    removed_emojis = []
+    for emoji in emojis_to_remove:
+        await remove_forbidden_nickname_emoji(emoji)
+        removed_emojis.append(emoji)
+
+    if removed_emojis:
+        await message.answer(
+            f"Эмодзи <b>{' '.join(removed_emojis)}</b> удалены из списка запрещённых эмодзи для никнеймов.",
+            parse_mode='HTML'
+        )
+    else:
+        await message.answer("Указанных эмодзи не было в списке запрещённых эмодзи для никнеймов.")
+
+    await state.clear()
+
+
+@router.callback_query(lambda c: c.data == 'show_forbidden_nickname_emojis')
+async def process_show_forbidden_nickname_emojis(callback_query: CallbackQuery):
+    user_id = callback_query.from_user.id
+    if not await is_user_admin(user_id):
+        return
+
+    forbidden_nickname_emojis = await get_forbidden_nickname_emojis()
+    if forbidden_nickname_emojis:
+        emojis_list = ' '.join(sorted(forbidden_nickname_emojis))
+        message_text = f"🚫Запрещённые эмодзи в никнеймах:\n{emojis_list}"
+    else:
+        message_text = "Список запрещённых эмодзи в никнеймах пуст"
+
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Закрыть", callback_data="close_message")]
+        ]
+    )
+    await callback_query.message.answer(message_text, parse_mode='HTML', reply_markup=kb)
+    await callback_query.answer()
