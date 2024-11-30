@@ -166,7 +166,7 @@ async def get_user_data(user_id):
 
 async def get_permanently_banned_users():
     users = []
-    async with db_connection.execute('SELECT user_id, chat_id FROM users WHERE mute_count >= 3') as cursor:
+    async with db_connection.execute('SELECT user_id, chat_id FROM users WHERE mute_count >= 3 OR status = "banned"') as cursor:
         async for row in cursor:
             users.append({'user_id': row[0], 'chat_id': row[1]})
     return users
@@ -350,3 +350,13 @@ async def remove_forbidden_nickname_emoji(emoji):
             await db_connection.commit()
             forbidden_nickname_emojis_cache.remove(emoji)
             logger.info(f"Удалено запрещённое эмодзи в никнейме: {emoji}")
+
+async def add_banned_user(user_id):
+    async with cache_lock:
+        await db_connection.execute('UPDATE users SET status = "banned" WHERE user_id = ?', (user_id,))
+        await db_connection.commit()
+
+async def update_status_to_normal(user_id):
+    async with cache_lock:
+        await db_connection.execute('UPDATE users SET status = "normal" WHERE user_id = ?', (user_id,))
+        await db_connection.commit()

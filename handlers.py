@@ -8,6 +8,7 @@ from aiogram.types import (
     Message, CallbackQuery, InlineKeyboardButton,
     InlineKeyboardMarkup, ChatPermissions
 )
+
 from aiogram.filters import CommandStart
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
@@ -20,7 +21,7 @@ from database import (
     clear_forbidden_words, get_setting, update_setting,
     get_user_data, reset_user_mute_count, get_permanently_banned_users,
     get_users_with_mutes_less_than_3,get_user, get_user, add_or_update_user, delete_user,
-    get_suspicious_users, get_violator_users,
+    get_suspicious_users, get_violator_users, add_banned_user, update_status_to_normal,
     get_forbidden_nickname_emojis, get_forbidden_nickname_words, add_forbidden_nickname_emoji, 
     add_forbidden_nickname_word, remove_forbidden_nickname_emoji, remove_forbidden_nickname_word
 )
@@ -530,7 +531,10 @@ async def unban_all_confirm(callback_query: CallbackQuery):
                 user_id=user_id,
                 permissions=ChatPermissions(can_send_messages=True)
             )
+            await update_status_to_normal(user_id)
+
             await reset_user_mute_count(user_id)
+            await delete_user(user_id)
             success_count += 1
             # logger.info(f"Пользователь {user_id} разбанен администратором {admin_user_id}.")
         except Exception as e:
@@ -580,7 +584,9 @@ async def unban_user(callback_query: CallbackQuery):
                 user_id=selected_user_id,
                 permissions=ChatPermissions(can_send_messages=True)
             )
+            await update_status_to_normal(selected_user_id)
             await reset_user_mute_count(selected_user_id)
+            await delete_user(selected_user_id)
             await callback_query.answer(f"Пользователь {selected_user_id} разбанен.", show_alert=True)
             await callback_query.message.delete()
             # logger.info(f"Пользователь {selected_user_id} разбанен администратором {admin_user_id}.")
@@ -822,12 +828,16 @@ async def select_suspicious_user(callback_query: CallbackQuery):
     # Получаем информацию о пользователе
     user_data = await get_user_data(selected_user_id)
     if user_data:
+        user_chat = await bot.get_chat(selected_user_id)
         try:
-            user_chat = await bot.get_chat(selected_user_id)
-            user_full_name = user_chat.full_name
-            user_profile_link = f"[{user_full_name}](tg://user?id={selected_user_id})"
+            mention = f'@{user_chat.username}'
+            user_profile_link = f'<a href="https://t.me/{user_chat.username}">{mention}</a>'
+            
         except:
-            user_profile_link = f"Пользователь с ID {selected_user_id}"
+            user_full_name = user_chat.full_name
+            link = f'tg://user?id={selected_user_id}'
+            
+            user_profile_link = f'<a href="{link}">{user_full_name}</a>'
 
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="✅ Забанить", callback_data=f"ban_suspicious_user_{selected_user_id}")],
@@ -859,7 +869,7 @@ async def ban_suspicious_user(callback_query: CallbackQuery):
         chat_id = user_data['chat_id']
         try:
             await callback_query.bot.ban_chat_member(chat_id=chat_id, user_id=selected_user_id)
-            await delete_user(selected_user_id)
+            await add_banned_user(selected_user_id)
             await callback_query.answer(f"Пользователь {selected_user_id} забанен.", show_alert=True)
             await callback_query.message.delete()
             logger.info(f"Пользователь {selected_user_id} забанен администратором {admin_user_id}.")
@@ -879,17 +889,27 @@ async def remove_suspicious_user(callback_query: CallbackQuery):
         return
 
     selected_user_id = int(callback_query.data.split('_')[-1])
-    await bot.restrict_chat_member(
-                chat_id=chat_id,
-                user_id=selected_user_id,
-                permissions=ChatPermissions(
-                    can_send_messages=True
+    try:
+        member = await bot.get_chat_member(chat_id, selected_user_id)
+        status = member.status
+    
+        await bot.restrict_chat_member(
+                    chat_id=chat_id,
+                    user_id=selected_user_id,
+                    permissions=ChatPermissions(
+                        can_send_messages=True
+                    )
                 )
-            )
-    await delete_user(selected_user_id)
-    await callback_query.answer(f"Пользователь {selected_user_id} удалён из пула.", show_alert=True)
-    # await send_nickname_change_request(selected_user_id)
-    await callback_query.message.delete()
+        
+        await delete_user(selected_user_id)
+        await callback_query.answer(f"Пользователь {selected_user_id} удалён из пула.", show_alert=True)
+        # await send_nickname_change_request(selected_user_id)
+        await callback_query.message.delete()
+    except Exception as e:
+        await delete_user(selected_user_id)
+        await callback_query.answer(f"Пользователь {selected_user_id} удалён из пула.", show_alert=True)
+        # await send_nickname_change_request(selected_user_id)
+        await callback_query.message.delete()
 
 # async def send_nickname_change_request(user_id):
 #     try:
@@ -954,7 +974,7 @@ async def ban_all_suspicious_confirm(callback_query: CallbackQuery):
             # Баним пользователя
             await callback_query.bot.ban_chat_member(chat_id=chat_id, user_id=user_id)
             # Удаляем пользователя из пула
-            await delete_user(user_id)
+            await add_banned_user(user_id)
             success_count += 1
             logger.info(f"Пользователь {user_id} забанен администратором {admin_user_id}.")
         except Exception as e:
@@ -962,6 +982,7 @@ async def ban_all_suspicious_confirm(callback_query: CallbackQuery):
 
     await callback_query.answer(f"Забанено пользователей: {success_count}.", show_alert=True)
     await callback_query.message.delete()
+
 
 # Обработчик выбора нарушителя
 @router.callback_query(lambda c: c.data.startswith('select_violator_user_'))
@@ -973,12 +994,16 @@ async def select_violator_user(callback_query: CallbackQuery):
     selected_user_id = int(callback_query.data.split('_')[-1])
     user_data = await get_user_data(selected_user_id)
     if user_data:
+        user_chat = await bot.get_chat(selected_user_id)
         try:
-            user_chat = await bot.get_chat(selected_user_id)
-            user_full_name = user_chat.full_name
-            user_profile_link = f"[{user_full_name}](tg://user?id={selected_user_id})"
+            mention = f'@{user_chat.username}'
+            user_profile_link = f'<a href="https://t.me/{user_chat.username}">{mention}</a>'
+            
         except:
-            user_profile_link = f"Пользователь с ID {selected_user_id}"
+            user_full_name = user_chat.full_name
+            link = f'tg://user?id={selected_user_id}'
+            
+            user_profile_link = f'<a href="{link}">{user_full_name}</a>'
 
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="✅ Забанить", callback_data=f"ban_violator_user_{selected_user_id}")],
@@ -988,7 +1013,7 @@ async def select_violator_user(callback_query: CallbackQuery):
 
         await callback_query.message.answer(
             f"Выберите действие для пользователя {user_profile_link}:",
-            parse_mode=ParseMode.MARKDOWN,
+            parse_mode=ParseMode.HTML,
             reply_markup=keyboard
         )
         await callback_query.answer()
@@ -1010,7 +1035,7 @@ async def ban_violator_user(callback_query: CallbackQuery):
         chat_id = user_data['chat_id']
         try:
             await callback_query.bot.ban_chat_member(chat_id=chat_id, user_id=selected_user_id)
-            await delete_user(selected_user_id)
+            await add_banned_user(selected_user_id)
             await callback_query.answer(f"Пользователь {selected_user_id} забанен.", show_alert=True)
             await callback_query.message.delete()
             logger.info(f"Пользователь {selected_user_id} забанен администратором {admin_user_id}.")
@@ -1028,19 +1053,30 @@ async def remove_violator_user(callback_query: CallbackQuery):
     chat_id = callback_query.message.chat.id
     if not await is_user_admin(user_id):
         return
-
+    
     selected_user_id = int(callback_query.data.split('_')[-1])
-    await bot.restrict_chat_member(
-                chat_id=chat_id,
-                user_id=selected_user_id,
-                permissions=ChatPermissions(
-                    can_send_messages=True
+    try:
+        member = await bot.get_chat_member(chat_id, selected_user_id)
+        status = member.status
+    
+        await bot.restrict_chat_member(
+                    chat_id=chat_id,
+                    user_id=selected_user_id,
+                    permissions=ChatPermissions(
+                        can_send_messages=True
+                    )
                 )
-            )
-    await delete_user(selected_user_id)
-    await callback_query.answer(f"Пользователь {selected_user_id} удалён из пула.", show_alert=True)
-    # await send_nickname_change_request(selected_user_id)
-    await callback_query.message.delete()
+        
+        await delete_user(selected_user_id)
+        await callback_query.answer(f"Пользователь {selected_user_id} удалён из пула.", show_alert=True)
+        # await send_nickname_change_request(selected_user_id)
+        await callback_query.message.delete()
+    except Exception as e:
+        await delete_user(selected_user_id)
+        await callback_query.answer(f"Пользователь {selected_user_id} удалён из пула.", show_alert=True)
+        # await send_nickname_change_request(selected_user_id)
+        await callback_query.message.delete()
+
 
 # Обработчик бана всех нарушителей
 @router.callback_query(lambda c: c.data == 'ban_all_violator_users')
@@ -1091,7 +1127,7 @@ async def ban_all_violators_confirm(callback_query: CallbackQuery):
         chat_id = user['chat_id']
         try:
             await callback_query.bot.ban_chat_member(chat_id=chat_id, user_id=user_id)
-            await delete_user(user_id)
+            await add_banned_user(user_id)
             success_count += 1
             logger.info(f"Пользователь {user_id} забанен администратором {admin_user_id}.")
         except Exception as e:
