@@ -847,7 +847,7 @@ async def select_suspicious_user(callback_query: CallbackQuery):
 
         await callback_query.message.answer(
             f"Выберите действие для пользователя {user_profile_link}:",
-            parse_mode=ParseMode.MARKDOWN,
+            parse_mode=ParseMode.HTML,
             reply_markup=keyboard
         )
         await callback_query.answer()
