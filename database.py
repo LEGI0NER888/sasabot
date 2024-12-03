@@ -3,7 +3,7 @@ import logging
 import aiosqlite
 import asyncio
 from datetime import datetime, timedelta
-
+from config.config_bot import bot
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -360,3 +360,33 @@ async def update_status_to_normal(user_id):
     async with cache_lock:
         await db_connection.execute('UPDATE users SET status = "normal" WHERE user_id = ?', (user_id,))
         await db_connection.commit()
+
+
+# Новая функция для получения пользователей с определёнными статусами
+async def get_users_with_statuses(status_list):
+    users = []
+    placeholders = ', '.join('?' * len(status_list))
+    query = f'SELECT user_id, chat_id, status FROM users WHERE status IN ({placeholders})'
+    async with db_connection.execute(query, status_list) as cursor:
+        async for row in cursor:
+            users.append({'user_id': row[0], 'chat_id': row[1], 'status': row[2]})
+    return users
+
+# Функция проверки, находится ли пользователь в чате
+async def is_user_in_chat(chat_id: int, user_id: int) -> bool:
+    try:
+        member = await bot.get_chat_member(chat_id, user_id)
+        return True
+    except Exception:
+        return False
+
+# Функция обновления списка пользователей
+async def update_user_list():
+    from config.config_bot import GROUP_ID  # Импортируем ваш chat_id
+    chat_id = GROUP_ID  # Замените на ваш chat_id
+    users_to_check = await get_users_with_statuses(['violator', 'suspicious'])
+    for user in users_to_check:
+        user_id = user['user_id']
+        if not await is_user_in_chat(chat_id, user_id):
+            await delete_user(user_id)
+            logger.info(f"Пользователь {user_id} удален из базы данных, так как он больше не в чате и имел статус {user['status']}.")

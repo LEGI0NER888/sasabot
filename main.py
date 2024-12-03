@@ -13,6 +13,7 @@ import podozr_handlers as router_podozr
 import ero_handlers as router_ero
 from middlewares.anti_spam import AntiSpamMiddleware
 
+
 async def main():
     logging.basicConfig(level=logging.INFO)
     await init_db()  # Инициализируем базу данных и загружаем запрещённые слова

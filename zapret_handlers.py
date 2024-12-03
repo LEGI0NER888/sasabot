@@ -255,10 +255,12 @@ async def handle_group_message(message: Message):
             # Пользователь является нарушителем
             await add_or_update_user(user_id, message.chat.id, mute_count=0, last_mute_time=None, status='violator')
             logger.info(f"Пользователь {user_id} помечен как нарушитель")
+            await message.delete()
         elif has_forbidden_emoji or has_forbidden_word_nickname:
             # Пользователь является подозрительным
             await add_or_update_user(user_id, message.chat.id, mute_count=0, last_mute_time=None, status='suspicious')
             logger.info(f"Пользователь {user_id} помечен как подозрительный")
+            await message.delete()
     
     if message.sender_chat and message.sender_chat.id == CHANNEL_ID and not thread_id:
         try:

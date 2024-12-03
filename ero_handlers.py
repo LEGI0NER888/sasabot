@@ -13,7 +13,7 @@ from show_handlers import is_user_admin
 from config.config_bot import bot, GROUP_ID
 from database import (
 
-    get_user_data, delete_user,
+    get_user_data, delete_user, update_user_list,
     get_suspicious_users, get_violator_users, add_banned_user
 
 )
@@ -40,7 +40,6 @@ async def show_suspicions_menu(callback_query: CallbackQuery):
 async def show_suspicious_users(callback_query: CallbackQuery):
     user_id = callback_query.from_user.id
     if not await is_user_admin(user_id):
-        await callback_query.answer("У вас нет прав для выполнения этого действия.", show_alert=True)
         return
 
     # Извлекаем номер страницы из callback_data
@@ -113,6 +112,10 @@ async def show_suspicious_users(callback_query: CallbackQuery):
                 callback_data="ban_all_suspicious_users"
             ),
             InlineKeyboardButton(
+                text="🔄 Обновить",
+                callback_data="update_user_list"
+            ),
+            InlineKeyboardButton(
                 text="❌ Закрыть",
                 callback_data="close_message"
             )
@@ -122,7 +125,7 @@ async def show_suspicious_users(callback_query: CallbackQuery):
         kb = InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
 
         try:
-            await callback_query.message.edit_text(
+            await callback_query.message.answer(
                 "Список подозрительных пользователей:",
                 reply_markup=kb
             )
@@ -133,7 +136,7 @@ async def show_suspicious_users(callback_query: CallbackQuery):
             inline_keyboard=[[InlineKeyboardButton(text="❌ Закрыть", callback_data="close_message")]]
         )
         try:
-            await callback_query.message.edit_text(
+            await callback_query.message.answer(
                 "Нет подозрительных пользователей.",
                 reply_markup=kb
             )
@@ -141,6 +144,21 @@ async def show_suspicious_users(callback_query: CallbackQuery):
             pass
 
     await callback_query.answer()
+
+# Обработчик кнопки "Обновить"
+@router.callback_query(lambda c: c.data == "update_user_list")
+async def update_user_list_handler(callback_query: CallbackQuery):
+    user_id = callback_query.from_user.id
+    if not await is_user_admin(user_id):
+        await callback_query.answer("У вас нет прав для выполнения этого действия.", show_alert=True)
+        return
+
+    await update_user_list()
+    await callback_query.answer("Список пользователей обновлен.", show_alert=True)
+
+    # Обновляем текущее сообщение с обновленным списком пользователей
+    # Например, повторно вызываем функцию отображения списка нарушителей
+    await show_violator_users(callback_query)
 
 
 # Обработчик выбора подозрительного пользователя с пагинацией
@@ -194,7 +212,7 @@ async def select_suspicious_user(callback_query: CallbackQuery):
         ])
 
         try:
-            await callback_query.message.edit_text(
+            await callback_query.message.answer(
                 f"Выберите действие для пользователя {user_profile_link}:",
                 parse_mode=ParseMode.HTML,
                 reply_markup=keyboard
@@ -262,6 +280,10 @@ async def show_violator_users(callback_query: CallbackQuery):
         # Кнопки действий
         action_buttons = [
             InlineKeyboardButton(text="🔒 Забанить всех", callback_data="ban_all_violator_users"),
+            InlineKeyboardButton(
+                text="🔄 Обновить",
+                callback_data="update_user_list"
+            ),
             InlineKeyboardButton(text="❌ Закрыть", callback_data="close_message")
         ]
         keyboard_buttons.append(action_buttons)
@@ -269,7 +291,7 @@ async def show_violator_users(callback_query: CallbackQuery):
         kb = InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
 
         try:
-            await callback_query.message.edit_text("Список нарушителей:", reply_markup=kb)
+            await callback_query.message.answer("Список нарушителей:", reply_markup=kb)
         except:
             pass
     else:
@@ -277,7 +299,7 @@ async def show_violator_users(callback_query: CallbackQuery):
             inline_keyboard=[[InlineKeyboardButton(text="❌ Закрыть", callback_data="close_message")]]
         )
         try:
-            await callback_query.message.edit_text("Нет нарушителей.", reply_markup=kb)
+            await callback_query.message.answer("Нет нарушителей.", reply_markup=kb)
         except:
             pass
 
@@ -319,7 +341,7 @@ async def select_violator_user(callback_query: CallbackQuery):
         ])
 
         try:
-            await callback_query.message.edit_text(
+            await callback_query.message.answer(
                 f"Выберите действие для пользователя {user_profile_link}:",
                 parse_mode=ParseMode.HTML,
                 reply_markup=keyboard
