@@ -1,0 +1,28 @@
+ban_handlers: show_permanently_banned_users
+  unban_all_permanently_banned_users
+  select_banned_user_
+
+podozr_handlers: add_nickname_words
+  remove_nickname_words
+  show_forbidden_nickname_words
+
+  add_nickname_emojis
+  remove_nickname_emojis
+  show_forbidden_nickname_emojis
+
+mute_handlers: unban_users_with_less_than_3_mutes
+
+zapret_handlers: show_forbidden_words
+  clear_words
+  remove_words
+  add_words
+
+  handle_group_message
+
+show_handlers: cmd_start
+  toggle_antispam
+  change_number_message_to_delete
+  close_message
+
+ero_handlers: show_violator_users, select, ban, delete_from_pool
+  show_suspicions_users,select_suspicious_user,ban_suspicious_user,delete_from_pool
