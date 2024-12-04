@@ -8,7 +8,7 @@ from aiogram.types import (
 
 from config.config_bot import bot, GROUP_ID, ADMINS, CHANNEL_ID
 from database import (
-    get_user_data, reset_user_mute_count, get_permanently_banned_users, update_status_to_normal, delete_user
+    get_user_data, reset_user_mute_count, get_permanently_banned_users, update_status_to_normal, delete_user, update_user_banned_list
 )
 from show_handlers import is_user_admin
 
@@ -74,6 +74,7 @@ async def show_permanently_banned_users(callback_query: CallbackQuery):
         # Кнопки действий
         action_buttons = [
             InlineKeyboardButton(text="🗑️ Очистить всех", callback_data="clear_all_banned_users"),
+            InlineKeyboardButton(text="🔄 Обновить", callback_data="update_user_banned_list"),
             InlineKeyboardButton(text="❌ Закрыть", callback_data="close_message")
         ]
 
@@ -257,3 +258,15 @@ async def unban_user(callback_query: CallbackQuery):
     else:
         await callback_query.answer(f"Пользователь {selected_user_id} не найден среди забаненных.", show_alert=True)
         await callback_query.message.delete()
+
+
+# Обработчик кнопки "Обновить забаненных"
+@router.callback_query(lambda c: c.data == "update_user_banned_list")
+async def update_user_list_handler(callback_query: CallbackQuery):
+    user_id = callback_query.from_user.id
+    if not await is_user_admin(user_id):
+        await callback_query.answer("У вас нет прав для выполнения этого действия.", show_alert=True)
+        return
+
+    await update_user_banned_list()
+    await callback_query.answer("Список пользователей обновлен.", show_alert=True)

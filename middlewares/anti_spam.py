@@ -3,7 +3,7 @@ import asyncio
 import logging
 from aiogram import BaseMiddleware
 from aiogram.types import Message, ChatPermissions
-from database import get_setting, get_user, add_or_update_user
+from database import get_setting, get_user, add_or_update_user, add_banned_user
 from datetime import datetime, timedelta
 from config.config_bot import ADMINS
 
@@ -120,6 +120,7 @@ class AntiSpamMiddleware(BaseMiddleware):
                 self.logger.info(f"User {user_id} temporarily muted for 10 minutes for repeated {reason}.")
                 asyncio.create_task(self.unmute_user_after_delay(event.bot, chat_id, user_id, delay=600))
             elif user_data['mute_count'] >= 3:
+                add_banned_user(user_id)
                 await event.bot.restrict_chat_member(
                     chat_id=chat_id,
                     user_id=user_id,

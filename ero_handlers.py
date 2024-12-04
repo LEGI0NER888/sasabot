@@ -71,10 +71,11 @@ async def show_suspicious_users(callback_query: CallbackQuery):
                 user_chat = await bot.get_chat(user['user_id'])
                 user_full_name = user_chat.full_name
                 username = user_chat.username
-                if username:
-                    user_text = f"@{username}"
-                else:
+                if user_full_name:
                     user_text = user_full_name
+                    
+                else:
+                    user_text = f"@{username}"
             except:
                 user_text = f"ID: {user['user_id']}"
 
@@ -156,9 +157,7 @@ async def update_user_list_handler(callback_query: CallbackQuery):
     await update_user_list()
     await callback_query.answer("Список пользователей обновлен.", show_alert=True)
 
-    # Обновляем текущее сообщение с обновленным списком пользователей
-    # Например, повторно вызываем функцию отображения списка нарушителей
-    await show_violator_users(callback_query)
+
 
 
 # Обработчик выбора подозрительного пользователя с пагинацией
@@ -256,13 +255,17 @@ async def show_violator_users(callback_query: CallbackQuery):
 
         keyboard_buttons = []
         for user in current_page_users:
-            # Получаем полное имя пользователя через API
             try:
                 user_chat = await bot.get_chat(user['user_id'])
                 user_full_name = user_chat.full_name
+                username = user_chat.username
+                if user_full_name:
+                    user_text = user_full_name
+                    
+                else:
+                    user_text = f"@{username}"
             except:
-                user_full_name = f"ID: {user['user_id']}"
-            user_text = user_full_name
+                user_text = f"ID: {user['user_id']}"
             button = InlineKeyboardButton(text=user_text, callback_data=f"select_violator_user_{user['user_id']}")
             keyboard_buttons.append([button])  # Каждая кнопка в отдельной строке
 

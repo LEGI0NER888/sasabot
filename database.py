@@ -166,7 +166,7 @@ async def get_user_data(user_id):
 
 async def get_permanently_banned_users():
     users = []
-    async with db_connection.execute('SELECT user_id, chat_id FROM users WHERE mute_count >= 3 OR status = "banned"') as cursor:
+    async with db_connection.execute('SELECT user_id, chat_id FROM users WHERE status = "banned"') as cursor:
         async for row in cursor:
             users.append({'user_id': row[0], 'chat_id': row[1]})
     return users
@@ -362,7 +362,7 @@ async def update_status_to_normal(user_id):
         await db_connection.commit()
 
 
-# Новая функция для получения пользователей с определёнными статусами
+# функция для получения пользователей с определёнными статусами
 async def get_users_with_statuses(status_list):
     users = []
     placeholders = ', '.join('?' * len(status_list))
@@ -385,6 +385,17 @@ async def update_user_list():
     from config.config_bot import GROUP_ID  # Импортируем ваш chat_id
     chat_id = GROUP_ID  # Замените на ваш chat_id
     users_to_check = await get_users_with_statuses(['violator', 'suspicious'])
+    for user in users_to_check:
+        user_id = user['user_id']
+        if not await is_user_in_chat(chat_id, user_id):
+            await delete_user(user_id)
+            logger.info(f"Пользователь {user_id} удален из базы данных, так как он больше не в чате и имел статус {user['status']}.")
+
+
+async def update_user_banned_list():
+    from config.config_bot import GROUP_ID  # Импортируем ваш chat_id
+    chat_id = GROUP_ID  # Замените на ваш chat_id
+    users_to_check = await get_users_with_statuses(['banned'])
     for user in users_to_check:
         user_id = user['user_id']
         if not await is_user_in_chat(chat_id, user_id):
