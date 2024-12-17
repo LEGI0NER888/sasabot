@@ -4,7 +4,7 @@ import re
 import logging
 from aiogram import F, Router
 from aiogram.types import (
-    Message, CallbackQuery, InlineKeyboardButton,
+    Message, ContentType, CallbackQuery, InlineKeyboardButton,
     InlineKeyboardMarkup
 )
 from show_handlers import is_user_admin, FunctionStates
@@ -233,6 +233,13 @@ async def handle_group_message(message: Message):
                 except Exception as e:
                     logger.error(f"Ошибка при удалении команды: {e}")
                 return
+            
+    if message.content_type == ContentType.LOCATION:
+        try:
+            await message.delete()
+        except Exception as e:
+            logger.error(f"Ошибка при удалении локации: {e}")
+        return
 
     # Проверяем, есть ли у пользователя статус
     user_data = await get_user(user_id)
