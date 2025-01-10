@@ -7,6 +7,7 @@ API_TOKEN = config['TOKEN']
 GROUP_ID = int(config['GROUP_ID'])
 CHANNEL_ID = int(config['CHANNEL_ID'])
 ADMINS = config['ADMINS']
+MODERS = config['MODERS']
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
-MODERS = config['MODERS']
+
