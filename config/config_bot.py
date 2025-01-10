@@ -9,4 +9,4 @@ CHANNEL_ID = int(config['CHANNEL_ID'])
 ADMINS = config['ADMINS']
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
-
+MODERS = config['MODERS']
