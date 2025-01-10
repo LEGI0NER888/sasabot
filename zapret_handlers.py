@@ -12,7 +12,7 @@ from aiogram.fsm.context import FSMContext
 from collections import defaultdict
 from rapidfuzz import fuzz
 
-from config.config_bot import bot, GROUP_ID, ADMINS, CHANNEL_ID, MODERS
+from config.config_bot import bot, GROUP_ID, ADMINS, CHANNEL_ID
 from database import (
     get_forbidden_words, add_forbidden_word, remove_forbidden_word,
     clear_forbidden_words, get_setting,
@@ -222,7 +222,7 @@ async def handle_group_message(message: Message):
         "Я слежу чтобы вы не писали гадости, кто ослушается: будет наказан👇🏻👇🏻👇🏻"
     )
 
-    if (message.from_user and message.from_user.id == bot.id) or user_id in MODERS:
+    if (message.from_user and message.from_user.id == bot.id) or user_id in ADMINS:
         return
 
     if message.entities:
