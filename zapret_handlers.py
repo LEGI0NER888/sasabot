@@ -222,7 +222,7 @@ async def handle_group_message(message: Message):
         "Я слежу чтобы вы не писали гадости, кто ослушается: будет наказан👇🏻👇🏻👇🏻"
     )
 
-    if (message.from_user and message.from_user.id == bot.id) or user_id in ADMINS:
+    if (message.from_user and message.from_user.id == bot.id) or str(user_id) in ADMINS:
         return
 
     if message.entities:
